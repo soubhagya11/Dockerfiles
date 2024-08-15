@@ -1,0 +1,23 @@
+-------------------------------------------
+#DOCKERFILE FOR NODEJS
+
+
+FROM node:22.6
+MAINTAINER shubham "ranjansamalsoubhagya@gmail.com"
+COPY . /index
+WORKDIR /index
+RUN npm install -r package.json
+ENTRYPOINT ["node"]
+CMD ["index.js"]
+
+---------------------------------------------
+#DOCKER FILE FOR PYTHON
+
+
+FROM python:3.6
+MAINTAINER shubham "ranjansamalsoubhagya@gmail.com"
+COPY . /app
+WORKDIR /app
+RUN pip install -r requirements.txt
+ENTRYPOINT ["python"]
+CMD ["app.py"] 
