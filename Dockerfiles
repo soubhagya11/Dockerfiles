@@ -21,3 +21,170 @@ WORKDIR /app
 RUN pip install -r requirements.txt
 ENTRYPOINT ["python"]
 CMD ["app.py"] 
+
+-------------------------------------------------
+
+FIRST DOCKER FILE.(only for installing tomcat)
+-----------------------------------------------
+FROM maven:3.8.4-eclipse-temurin-17 AS build
+RUN mkdir /app
+WORKDIR /app
+COPY . .
+RUN mvn package
+
+FROM tomcat:9.0.95
+COPY --from=build /app/webapp/target/webapp.war /usr/local/tomcat/webapps/webapp.war
+RUN cp -R  /usr/local/tomcat/webapps.dist/*  /usr/local/tomcat/webapps
+
+
+SECOND DOCKER FILE.(deploying war & jar file)
+----------------------------------------------
+# Stage 1: Build the application using Maven
+FROM maven:3.8.4-eclipse-temurin-17 AS build
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the entire project into the container
+COPY . .
+
+# Build the project and package the WAR file
+RUN mvn clean package
+
+# Stage 2: Deploy the application using Tomcat
+FROM tomcat:9.0.95
+
+# Remove default Tomcat web applications to avoid conflicts
+RUN rm -rf /usr/local/tomcat/webapps/*
+
+# Copy the WAR file from the build stage to Tomcat's webapps directory
+COPY --from=build /app/webapp/target/*.war /usr/local/tomcat/webapps/ROOT.war
+
+# Expose port 8080 to access the application
+EXPOSE 8080
+
+# Start Tomcat when the container launches
+CMD ["catalina.sh", "run"]
+
+THIRD DOCKERFILE.(with ubuntu os)
+----------------------------------------------------
+# Stage 1: Build the application using Maven
+FROM ubuntu:latest AS builder
+
+# Install necessary packages
+RUN apt-get update && \
+    apt-get install -y openjdk-8-jdk wget unzip && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set Maven version
+ARG MAVEN_VERSION=3.9.6
+
+# Download and install Maven
+RUN wget https://dlcdn.apache.org/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz && \
+    tar -zxvf apache-maven-${MAVEN_VERSION}-bin.tar.gz && \
+    rm apache-maven-${MAVEN_VERSION}-bin.tar.gz && \
+    mv apache-maven-${MAVEN_VERSION} /usr/lib/maven
+
+# Set environment variables for Maven
+ENV MAVEN_HOME=/usr/lib/maven
+ENV MAVEN_CONFIG=/root/.m2
+ENV PATH=$MAVEN_HOME/bin:$PATH
+
+# Create application directory
+RUN mkdir -p /app
+
+# Copy project files into the container
+COPY . /app
+
+# Set working directory
+WORKDIR /app
+
+# Build the application
+RUN mvn clean package
+
+# Stage 2: Deploy the application using Tomcat
+FROM tomcat:9.0.95
+
+# Remove default Tomcat web applications to avoid conflicts
+RUN rm -rf /usr/local/tomcat/webapps/*
+
+# Copy the WAR file from the build stage to Tomcat's webapps directory as ROOT.war
+COPY --from=builder /app/webapp/target/*.war /usr/local/tomcat/webapps/ROOT.war
+
+# (Optional) Expose port 8080 if not already exposed by the Tomcat image
+EXPOSE 8080
+
+# Start Tomcat when the container launches
+CMD ["catalina.sh", "run"]
+
+FOURTH DOCKERFILE(multi staged)
+--------------------------------------
+
+# Use the official Ubuntu image as the base image for building the Maven project
+FROM ubuntu:latest AS build
+
+# Set non-interactive mode for installing packages
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install necessary packages: OpenJDK 17, Maven, and other utilities
+RUN apt-get update && apt-get install -y \
+    openjdk-17-jdk \
+    maven \
+    wget \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set JAVA_HOME environment variable
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy the project files into the container
+COPY . .
+
+# Build the project using Maven
+RUN mvn clean package
+
+# Debug: List the contents of the target directory to confirm the WAR file
+RUN ls -al /app/webapp/target
+# Use the official Ubuntu image as the base for the runtime environment
+FROM ubuntu:latest
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install necessary packages
+RUN apt-get update && apt-get install -y \
+    openjdk-17-jdk \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set the Java environment variables
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PATH=$JAVA_HOME/bin:$PATH
+
+# Download and extract Tomcat (correcting the download and extraction paths)
+RUN wget https://dlcdn.apache.org/tomcat/tomcat-9/v9.0.95/bin/apache-tomcat-9.0.95.tar.gz -O /tmp/tomcat.tar.gz && \
+    mkdir /opt/tomcat && \
+    tar xzvf /tmp/tomcat.tar.gz -C /opt/tomcat --strip-components=1 && \
+    rm /tmp/tomcat.tar.gz
+
+# Set up Tomcat environment variables
+ENV CATALINA_HOME=/opt/tomcat
+ENV PATH=$CATALINA_HOME/bin:$PATH
+
+# Expose Tomcat port
+EXPOSE 8080
+
+# Copy the generated WAR file from the build stage
+COPY --from=build /app/webapp/target/webapp.war /opt/tomcat/webapps/webapp.war
+# Start Tomcat
+CMD ["/opt/tomcat/bin/catalina.sh", "run"]
+
+
+
+
+
